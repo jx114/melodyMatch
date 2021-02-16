@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import ListItem from './ListItem.jsx';
 
 const List = ({artists}) => {
   const artistNames = [];
