@@ -19,7 +19,6 @@ class App extends React.Component {
         image: '',
         isPlaying: false,
         artists: [],
-        songLength: '',
         preview: ""
       },
       similarArtists: [],
@@ -34,6 +33,8 @@ class App extends React.Component {
       spotifyWebApi.setAccessToken(params.access_token);
     }
     this.handleGenre = this.handleGenre.bind(this);
+    this.handleInnerGenre = this.handleInnerGenre.bind(this);
+    this.audioRef = React.createRef();
   }
   getHashParams() {
     var hashParams = {};
@@ -49,34 +50,10 @@ class App extends React.Component {
     const { nowPlaying, isLoading } = this.state;
     const { isPlaying } = nowPlaying;
     this.getCategories();
-    // isPlaying ? null : this.getNowPlaying();
     this.setState({
-      isLoading: !isLoading
+      isLoading: false
     })
   }
-
-  // getNowPlaying() {
-  //   spotifyWebApi.getMyCurrentPlaybackState()
-  //     .then((response) => {
-  //       console.log(response)
-  //       // console.log(response);
-  //       // console.log(response.item.uri.slice(14));
-  //       this.getRelatedArtists(response.item.artists[0].id);
-  //       this.setState({
-  //         nowPlaying: {
-  //           name: response.item.name,
-  //           image: response.item.album.images[0].url,
-  //           isPlaying: response.is_playing,
-  //           artists: response.item.artists,
-  //           songLength: response.item.duration_ms,
-  //           preview: response.item.preview_url
-  //         }
-  //       });
-  //     })
-  //     .catch((err) => {
-  //       console.log(err);
-  //     });
-  // }
 
   getRelatedArtists(artistId) {
     spotifyWebApi.getArtistRelatedArtists(artistId)
@@ -104,7 +81,6 @@ class App extends React.Component {
         console.log(err);
       })
   }
-
 
   getCategories() {
     spotifyWebApi.getCategories()
@@ -134,13 +110,13 @@ class App extends React.Component {
   getPlaylistTrack(playlistId) {
     spotifyWebApi.getPlaylistTracks(playlistId)
       .then(({items}) => {
-        const newTracks = items.filter(item => item.track.popularity <= 50 && item.track.popularity >= 15)
+        const newTracks = items.filter(item => item.track.popularity <= 50 && item.track.popularity >= 15 && item.track.preview_url)
         // console.log('this is filtered', newTracks);
         this.setState({
           genreTracks: newTracks
         });
+        this.loadFirstSong();
       })
-      .then(this.loadFirstSong())
       .catch((err) => {
         console.log(err);
       });
@@ -148,13 +124,20 @@ class App extends React.Component {
 
   loadFirstSong() {
     const { genreTracks } = this.state;
-    const randomTrack = Math.floor(Math.random() * genreTracks.length);
-    console.log('this is genreTracks', this.state.genreTracks);
+    const { track } = genreTracks[0];
     this.setState({
       nowPlaying: {
-        name: genreTracks[randomTrack].name,
+        name: track.name,
+        image: track.album.images[0].url,
+        artists: track.artists,
+        preview: track.preview_url
       }
-    })
+    }, () => {
+      console.log(this.audioRef);
+      this.audioRef.current.pause();
+      this.audioRef.current.load();
+      this.audioRef.current.play();
+    });
   }
 
   handleGenre(genre) {
@@ -166,24 +149,39 @@ class App extends React.Component {
     });
   }
 
+  handleInnerGenre(genre) {
+    this.getCategoryPlaylists(genre);
+    this.setState({
+      selectGenre: genre
+    });
+  }
+
   render () {
     const { nowPlaying, categories, isLoading, isSelected, loggedIn } = this.state;
 
     const { songLength, preview } = nowPlaying;
+    console.log(preview);
+    const renderAudio = preview
+      ? (
+        <div>
+          <audio ref={this.audioRef} controls="controls">
+            <source src={preview} type="audio/mpeg" />
+          </audio>
+        </div>
+      )
+      : (
+        <div>Loading Audio...</div>
+      )
     const renderSelect = isSelected
     ? (
       <div>
+          <GenreForm categories={categories} handleGenre={this.handleInnerGenre}/>
           <div>Now Playing: {nowPlaying.name}</div>
           <div>
-            <img src ={nowPlaying.image} style={{width: 100}}/>
+            <img src ={nowPlaying.image} style={{width: 300}}/>
           </div>
           <List artists={nowPlaying.artists}/>
-          <audio controls="controls">
-            <source src={preview} type="audio/mpeg" />
-          </audio>
-          {/* <button onClick={() => this.getNowPlaying()}>
-            Check Now Playing
-          </button> */}
+          {renderAudio}
         </div>
         )
         : (<div>
@@ -210,7 +208,6 @@ class App extends React.Component {
         </div>
       );
 
-    // setTimeout(() => this.getNowPlaying(), 30000);
     return (
     <div>
       <h1>MelodyMatch</h1>
