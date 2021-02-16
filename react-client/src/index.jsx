@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import Spotify from 'spotify-web-api-js';
 import List from './components/List.jsx';
+import GenreForm from './components/GenreForm.jsx';
 
 const spotifyWebApi = new Spotify();
 
@@ -14,18 +15,25 @@ class App extends React.Component {
     this.state = {
       loggedIn: params.access_token ? true : false,
       nowPlaying: {
-        name: 'Not Checked',
+        name: 'Nothing is playing right now',
         image: '',
         isPlaying: false,
         artists: [],
         songLength: '',
-        similarArtists: [],
-        similarSongs: []
-      }
+        preview: ""
+      },
+      similarArtists: [],
+      similarSongs: [],
+      categories: [],
+      isLoading: true,
+      selectGenre: '',
+      isSelected: false,
+      genreTracks: [],
     }
     if (params.access_token) {
       spotifyWebApi.setAccessToken(params.access_token);
     }
+    this.handleGenre = this.handleGenre.bind(this);
   }
   getHashParams() {
     var hashParams = {};
@@ -38,34 +46,42 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    const { nowPlaying } = this.state;
+    const { nowPlaying, isLoading } = this.state;
     const { isPlaying } = nowPlaying;
-    isPlaying ? null : this.getNowPlaying();
+    this.getCategories();
+    // isPlaying ? null : this.getNowPlaying();
+    this.setState({
+      isLoading: !isLoading
+    })
   }
 
-  getNowPlaying() {
-    spotifyWebApi.getMyCurrentPlaybackState()
-      .then((response) => {
-        console.log(response)
-        this.getRelatedArtists(response.item.artists[0].id);
-        this.setState({
-          nowPlaying: {
-            name: response.item.name,
-            image: response.item.album.images[0].url,
-            isPlaying: response.is_playing,
-            artists: response.item.artists,
-            songLength: response.item.duration_ms
-          }
-        })
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  }
+  // getNowPlaying() {
+  //   spotifyWebApi.getMyCurrentPlaybackState()
+  //     .then((response) => {
+  //       console.log(response)
+  //       // console.log(response);
+  //       // console.log(response.item.uri.slice(14));
+  //       this.getRelatedArtists(response.item.artists[0].id);
+  //       this.setState({
+  //         nowPlaying: {
+  //           name: response.item.name,
+  //           image: response.item.album.images[0].url,
+  //           isPlaying: response.is_playing,
+  //           artists: response.item.artists,
+  //           songLength: response.item.duration_ms,
+  //           preview: response.item.preview_url
+  //         }
+  //       });
+  //     })
+  //     .catch((err) => {
+  //       console.log(err);
+  //     });
+  // }
+
   getRelatedArtists(artistId) {
     spotifyWebApi.getArtistRelatedArtists(artistId)
       .then((response) => {
-        console.log(response);
+        // console.log(response);
         this.setState({
           similarArtists: response.artists
         });
@@ -79,7 +95,7 @@ class App extends React.Component {
   getArtistTopTracks(artistId) {
     spotifyWebApi.getArtistTopTracks(artistId, 'US')
       .then((response) => {
-        console.log(response);
+        // console.log(response);
         this.setState({
           similarSongs: response.tracks
         });
@@ -89,25 +105,116 @@ class App extends React.Component {
       })
   }
 
+
+  getCategories() {
+    spotifyWebApi.getCategories()
+      .then((response) => {
+        // console.log(response);
+        this.setState({
+          categories: response.categories.items
+        })
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
+  getCategoryPlaylists(genre) {
+    const randomList = Math.floor(Math.random() * 20);
+    spotifyWebApi.getCategoryPlaylists(genre)
+      .then(({playlists}) => {
+        // console.log(playlists.items[randomList].id);
+        this.getPlaylistTrack(playlists.items[randomList].id);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
+  getPlaylistTrack(playlistId) {
+    spotifyWebApi.getPlaylistTracks(playlistId)
+      .then(({items}) => {
+        const newTracks = items.filter(item => item.track.popularity <= 50 && item.track.popularity >= 15)
+        // console.log('this is filtered', newTracks);
+        this.setState({
+          genreTracks: newTracks
+        });
+      })
+      .then(this.loadFirstSong())
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
+  loadFirstSong() {
+    const { genreTracks } = this.state;
+    const randomTrack = Math.floor(Math.random() * genreTracks.length);
+    console.log('this is genreTracks', this.state.genreTracks);
+    this.setState({
+      nowPlaying: {
+        name: genreTracks[randomTrack].name,
+      }
+    })
+  }
+
+  handleGenre(genre) {
+    const { isSelected } = this.state;
+    this.getCategoryPlaylists(genre);
+    this.setState({
+      selectGenre: genre,
+      isSelected: !isSelected
+    });
+  }
+
   render () {
-    const { nowPlaying } = this.state;
-    const { songLength } = nowPlaying;
-    console.log(songLength);
-    setTimeout(() => this.getNowPlaying(), songLength);
+    const { nowPlaying, categories, isLoading, isSelected, loggedIn } = this.state;
+
+    const { songLength, preview } = nowPlaying;
+    const renderSelect = isSelected
+    ? (
+      <div>
+          <div>Now Playing: {nowPlaying.name}</div>
+          <div>
+            <img src ={nowPlaying.image} style={{width: 100}}/>
+          </div>
+          <List artists={nowPlaying.artists}/>
+          <audio controls="controls">
+            <source src={preview} type="audio/mpeg" />
+          </audio>
+          {/* <button onClick={() => this.getNowPlaying()}>
+            Check Now Playing
+          </button> */}
+        </div>
+        )
+        : (<div>
+          <GenreForm categories={categories} handleGenre={this.handleGenre}/>
+        </div>);
+    const renderLogin = loggedIn
+      ? (
+        <div>
+          {renderSelect}
+        </div>
+      )
+      : (
+        <div>
+          <a href='http://localhost:8888'>
+            <button>Log in with Spotify</button>
+          </a>
+        </div>
+      );
+    const renderLoading = isLoading
+      ? (<div>Loading...</div>)
+      : (
+        <div>
+          {renderLogin}
+        </div>
+      );
+
+    // setTimeout(() => this.getNowPlaying(), 30000);
     return (
     <div>
       <h1>MelodyMatch</h1>
-      <a href='http://localhost:8888'>
-        <button>Log in with Spotify</button>
-      </a>
-      <div>Now Playing: { this.state.nowPlaying.name }</div>
-      <div>
-        <img src ={this.state.nowPlaying.image} style={{width: 100}}/>
-      </div>
-      <List artists={this.state.nowPlaying.artists}/>
-      <button onClick={() => this.getNowPlaying()}>
-        Check Now Playing
-      </button>
+      {renderLoading}
     </div>)
   }
 }
